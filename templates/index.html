@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple YouTube Downloader</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 80px auto; padding: 0 16px; }
+    h1 { font-size: 1.4rem; }
+    .row { display: flex; gap: 8px; margin-top: 16px; }
+    input { flex: 1; padding: 12px; font-size: 1rem; border: 1px solid #ccc; border-radius: 8px; }
+    button { padding: 12px 20px; font-size: 1rem; border: 0; border-radius: 8px; background: #2563eb; color: #fff; cursor: pointer; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    #status { margin-top: 20px; font-size: 0.95rem; }
+    #status.error { color: #dc2626; }
+    #status.ok { color: #16a34a; }
+    a.dl { display: inline-block; margin-top: 12px; padding: 10px 16px; background: #16a34a; color: #fff; border-radius: 8px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h1>Download a YouTube video</h1>
+  <div class="row">
+    <input id="url" type="url" placeholder="Paste YouTube link here" />
+    <button id="go">Download</button>
+  </div>
+  <div id="status"></div>
+
+  <script>
+    const urlInput = document.getElementById('url');
+    const goBtn = document.getElementById('go');
+    const statusEl = document.getElementById('status');
+
+    function setStatus(msg, cls = '') {
+      statusEl.className = cls;
+      statusEl.innerHTML = msg;
+    }
+
+    goBtn.addEventListener('click', async () => {
+      const url = urlInput.value.trim();
+      if (!url) return setStatus('Paste a link first.', 'error');
+
+      goBtn.disabled = true;
+      setStatus('Sending link to server…');
+
+      try {
+        const res = await fetch('/api/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Server error');
+
+        const jobId = data.job_id;
+        setStatus('Downloading on server… (this can take a minute)');
+
+        // Poll status every 2 seconds
+        const poll = setInterval(async () => {
+          const s = await fetch(`/api/status/${jobId}`);
+          const j = await s.json();
+          if (j.status === 'done') {
+            clearInterval(poll);
+            goBtn.disabled = false;
+            setStatus(
+              `Ready. <a class="dl" href="/api/file/${jobId}">Save video</a>`,
+              'ok'
+            );
+          } else if (j.status === 'error') {
+            clearInterval(poll);
+            goBtn.disabled = false;
+            setStatus('Error: ' + (j.error || 'download failed'), 'error');
+          }
+        }, 2000);
+      } catch (err) {
+        goBtn.disabled = false;
+        setStatus('Error: ' + err.message, 'error');
+      }
+    });
+  </script>
+</body>
+</html>

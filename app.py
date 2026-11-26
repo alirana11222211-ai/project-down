@@ -20,14 +20,16 @@ def download_task(video_url, job_id):
         
         # --- FIX: Ensure this entire block is properly indented ---
         cmd = [
-            "python", "-m", "yt_dlp",
-            "--extractor-args", "youtubepot-bgutilhttp:base_url=https://bgutil-pot-latest-1crq.onrender.com",
-            "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-            "--merge-output-format", "mp4",
-            "-o", output_template,
-            "--no-playlist",
-            video_url,
-        ]
+    "python", "-m", "yt_dlp",
+    # Add this line: force the use of tv and mweb clients
+    "--extractor-args", "youtube:player_client=tv,mweb", 
+    "--extractor-args", "youtubepot-bgutilhttp:base_url=https://bgutil-pot-latest-1crq.onrender.com",
+    "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+    "--merge-output-format", "mp4",
+    "-o", output_template,
+    "--no-playlist",
+    video_url,
+]
         # -----------------------------------------------------------
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)

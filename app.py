@@ -10,24 +10,40 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# job_id -> {"status": "processing|done|error", "file": filename or None, "error": msg}
 jobs = {}
 
 def download_task(video_url, job_id):
-    """Runs yt-dlp in a background thread and saves an mp4 into DOWNLOAD_DIR."""
     try:
         output_template = os.path.join(DOWNLOAD_DIR, f"{job_id}.%(ext)s")
         
         cmd = [
             "python", "-m", "yt_dlp",
+            # 1. Add browser user-agent to look like a real user
+            "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            # 2. Wait 3 seconds between requests to avoid spam detection
+            "--sleep-requests", "3",
+            # 3. Force IPv4 to avoid blocked IPv6 pools
+            "--force-ipv4",
+            # 4. Add the player clients
             "--extractor-args", "youtube:player_client=tv,mweb",
+            # 5. Add your PO Token service
             "--extractor-args", "youtubepot-bgutilhttp:base_url=https://bgutil-pot-latest-1crq.onrender.com",
+            # 6. Video format and output settings
             "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
             "--merge-output-format", "mp4",
             "-o", output_template,
             "--no-playlist",
-            video_url,
         ]
+
+        # Securely get the proxy from Render's environment variables
+        proxy_url = os.environ.get("WEBSHARE_PROXY")
+        if proxy_url:
+            cmd.extend(["--proxy", proxy_url])
+        else:
+            print("WARNING: No proxy found in environment variables.")
+
+        # Add the video URL at the very end
+        cmd.append(video_url)
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
 
@@ -35,7 +51,6 @@ def download_task(video_url, job_id):
             jobs[job_id] = {"status": "error", "error": result.stderr[-500:] or "yt-dlp failed"}
             return
 
-        # Find the produced file (yt-dlp may produce .mp4 or .mkv etc.)
         for f in os.listdir(DOWNLOAD_DIR):
             if f.startswith(job_id + "."):
                 jobs[job_id] = {"status": "done", "file": f}
